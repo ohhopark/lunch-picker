@@ -196,6 +196,26 @@
             color: var(--muted); cursor: pointer;
             margin-top: 10px;
         }
+        .tourney-matchup { display: flex; align-items: stretch; gap: 10px; width: 100%; margin-bottom: 24px; }
+        .tourney-card {
+            flex: 1; padding: 28px 14px;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 20px;
+            cursor: pointer; text-align: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .tourney-card:active { transform: scale(0.96); }
+        .tourney-card.winner { border-color: var(--primary); background: var(--primary-light); }
+        .tourney-vs { display: flex; align-items: center; font-size: 16px; font-weight: 800; color: var(--muted); }
+        .tourney-name { font-size: 15px; font-weight: 700; line-height: 1.3; }
+        .tourney-cat { font-size: 11px; color: var(--muted); }
+        .tourney-dist { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .tourney-progress { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+        .tourney-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.2s; }
+        .tourney-dot.done { background: var(--primary); opacity: 0.5; }
+        .tourney-dot.current { background: var(--primary); box-shadow: 0 0 8px var(--primary); }
     </style>
 </head>
 <body>
@@ -214,6 +234,9 @@
             <div class="chip" data-value="중식">중식</div>
             <div class="chip" data-value="일식">일식</div>
             <div class="chip" data-value="양식">양식</div>
+            <div class="chip" data-value="아시안">아시안</div>
+            <div class="chip" data-value="멕시칸">멕시칸</div>
+            <div class="chip" data-value="디저트">디저트</div>
         </div>
     </div>
 
@@ -234,6 +257,7 @@
             <div class="chip selected" data-value="roulette">🎡 룰렛</div>
             <div class="chip" data-value="pinball">🎳 핀볼</div>
             <div class="chip" data-value="lotto">🎰 추첨기</div>
+            <div class="chip" data-value="tournament">🏆 토너먼트</div>
         </div>
     </div>
 
@@ -264,6 +288,27 @@
     <button class="spin-btn" id="spinBtn" onclick="spin()">돌리기!</button>
 </div>
 
+<!-- 토너먼트 화면 -->
+<div id="tournamentScreen" class="screen">
+    <div id="tourneyRoundLabel" class="anim-title" style="text-align:center; margin-bottom:4px;"></div>
+    <p style="text-align:center; color:var(--muted); font-size:13px; margin-bottom:24px;">마음에 드는 곳을 선택하세요</p>
+    <div class="tourney-matchup">
+        <div class="tourney-card" id="tourneyCardA" onclick="pickWinner(0)">
+            <div class="tourney-name" id="tourneyNameA"></div>
+            <div class="tourney-cat" id="tourneyCatA"></div>
+            <div class="tourney-dist" id="tourneyDistA"></div>
+        </div>
+        <div class="tourney-vs">VS</div>
+        <div class="tourney-card" id="tourneyCardB" onclick="pickWinner(1)">
+            <div class="tourney-name" id="tourneyNameB"></div>
+            <div class="tourney-cat" id="tourneyCatB"></div>
+            <div class="tourney-dist" id="tourneyDistB"></div>
+        </div>
+    </div>
+    <div class="tourney-progress" id="tourneyProgress"></div>
+    <button class="btn-home" onclick="showScreen('filterScreen')" style="margin-top:auto;">🏠 홈으로</button>
+</div>
+
 <!-- 결과 화면 -->
 <div id="resultScreen" class="screen">
     <div class="result-emoji">🎉</div>
@@ -282,7 +327,7 @@
 <script>
 
 const state = {
-    type: '음식점',
+    types: ['음식점'],
     distance: 1000,
     format: 'roulette',
     count: 0,
@@ -302,7 +347,26 @@ function setupChips(groupId, key, isInt) {
         });
     });
 }
-setupChips('typeGroup', 'type', false);
+// 음식 종류 다중 선택 (전체는 단독 선택)
+document.getElementById('typeGroup').querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        const val = chip.dataset.value;
+        const allChip = document.querySelector('#typeGroup .chip[data-value="음식점"]');
+        if (val === '음식점') {
+            document.getElementById('typeGroup').querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+            chip.classList.add('selected');
+            state.types = ['음식점'];
+        } else {
+            allChip.classList.remove('selected');
+            chip.classList.toggle('selected');
+            state.types = Array.from(document.getElementById('typeGroup').querySelectorAll('.chip.selected')).map(c => c.dataset.value);
+            if (state.types.length === 0) {
+                allChip.classList.add('selected');
+                state.types = ['음식점'];
+            }
+        }
+    });
+});
 setupChips('distanceGroup', 'distance', true);
 setupChips('formatGroup', 'format', false);
 setupChips('countGroup', 'count', true);
@@ -349,8 +413,12 @@ async function startSearch() {
 
         const take = state.count === 0 ? 8 : state.count;
         state.restaurants = shuffle(list).slice(0, take);
-        initAnimation();
-        showScreen('animScreen');
+        if (state.format === 'tournament') {
+            initTournament();
+        } else {
+            initAnimation();
+            showScreen('animScreen');
+        }
     } catch (e) {
         const msg = e.code === 1
             ? '위치 권한이 필요해요.\n브라우저 설정에서 위치를 허용해주세요.'
@@ -362,8 +430,21 @@ async function startSearch() {
 
 function fetchRestaurants() {
     const needed = state.count === 0 ? 8 : state.count;
-    const pageCount = Math.ceil(needed / 15);
+    const types = state.types;
+    if (types.length === 1) return fetchByType(types[0], needed);
+    const perType = Math.ceil(needed / types.length);
+    return Promise.all(types.map(t => fetchByType(t, perType))).then(results => {
+        const seen = new Set();
+        return results.flat().filter(r => {
+            if (seen.has(r.id)) return false;
+            seen.add(r.id);
+            return true;
+        });
+    });
+}
 
+function fetchByType(type, needed) {
+    const pageCount = Math.ceil(needed / 15);
     return new Promise((resolve, reject) => {
         const ps = new kakao.maps.services.Places();
         const baseOpts = {
@@ -372,34 +453,29 @@ function fetchRestaurants() {
             size: 15,
             sort: kakao.maps.services.SortBy.DISTANCE,
         };
-
         const results = [];
         let page = 1;
-
         const fetchPage = () => {
             const opts = { ...baseOpts, page };
             const cb = (result, status, pagination) => {
                 if (status === kakao.maps.services.Status.OK) {
                     results.push(...result);
-                    if (page < pageCount && pagination.hasNextPage) {
-                        page++;
-                        fetchPage();
-                    } else {
-                        resolve(results);
-                    }
+                    if (page < pageCount && pagination.hasNextPage) { page++; fetchPage(); }
+                    else resolve(results);
                 } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
                     resolve(results);
                 } else {
                     reject(new Error('장소 검색 실패'));
                 }
             };
-            if (state.type === '음식점') {
+            if (type === '음식점') {
                 ps.categorySearch('FD6', cb, opts);
+            } else if (type === '디저트') {
+                ps.categorySearch('CE7', cb, opts);
             } else {
-                ps.keywordSearch(state.type, cb, { ...opts, category_group_code: 'FD6' });
+                ps.keywordSearch(type, cb, { ...opts, category_group_code: 'FD6' });
             }
         };
-
         fetchPage();
     });
 }
@@ -453,8 +529,12 @@ function showResult() {
 }
 
 function goBack() {
-    initAnimation();
-    showScreen('animScreen');
+    if (state.format === 'tournament') {
+        initTournament();
+    } else {
+        initAnimation();
+        showScreen('animScreen');
+    }
 }
 
 function openMap() {
@@ -925,6 +1005,79 @@ class Lotto {
 
         requestAnimationFrame(bounce);
     }
+}
+
+// ════════════════════════════════════════
+// 🏆 토너먼트
+// ════════════════════════════════════════
+const tourney = { bracket: [], matchIdx: 0, winners: [], totalMatches: 0, matchesDone: 0 };
+
+function initTournament() {
+    tourney.bracket = [...state.restaurants];
+    tourney.matchIdx = 0;
+    tourney.winners = [];
+    let n = tourney.bracket.length, total = 0;
+    while (n > 1) { total += Math.floor(n / 2); n = Math.ceil(n / 2); }
+    tourney.totalMatches = total;
+    tourney.matchesDone = 0;
+    showTourneyMatch();
+    showScreen('tournamentScreen');
+}
+
+function showTourneyMatch() {
+    const b = tourney.bracket;
+    if (b.length === 1) { state.selected = b[0]; setTimeout(showResult, 300); return; }
+    if (tourney.matchIdx >= Math.floor(b.length / 2)) {
+        const bye = b.length % 2 === 1 ? [b[b.length - 1]] : [];
+        tourney.bracket = [...tourney.winners, ...bye];
+        tourney.matchIdx = 0;
+        tourney.winners = [];
+        showTourneyMatch();
+        return;
+    }
+    const i = tourney.matchIdx * 2;
+    const a = b[i], bItem = b[i + 1];
+    const matchNum = tourney.matchIdx + 1, totalInRound = Math.floor(b.length / 2);
+    document.getElementById('tourneyRoundLabel').textContent = roundName(b.length) + (totalInRound > 1 ? ` · ${matchNum}/${totalInRound} 경기` : '');
+    document.getElementById('tourneyNameA').textContent = a.place_name;
+    document.getElementById('tourneyCatA').textContent = a.category_name?.split('>').pop().trim() || '음식점';
+    document.getElementById('tourneyDistA').textContent = fmtDist(a.distance);
+    document.getElementById('tourneyNameB').textContent = bItem.place_name;
+    document.getElementById('tourneyCatB').textContent = bItem.category_name?.split('>').pop().trim() || '음식점';
+    document.getElementById('tourneyDistB').textContent = fmtDist(bItem.distance);
+    document.getElementById('tourneyCardA').classList.remove('winner');
+    document.getElementById('tourneyCardB').classList.remove('winner');
+    const prog = document.getElementById('tourneyProgress');
+    prog.innerHTML = '';
+    for (let j = 0; j < tourney.totalMatches; j++) {
+        const dot = document.createElement('div');
+        dot.className = 'tourney-dot' + (j < tourney.matchesDone ? ' done' : j === tourney.matchesDone ? ' current' : '');
+        prog.appendChild(dot);
+    }
+}
+
+function pickWinner(side) {
+    const b = tourney.bracket;
+    const i = tourney.matchIdx * 2;
+    const winner = side === 0 ? b[i] : b[i + 1];
+    document.getElementById(side === 0 ? 'tourneyCardA' : 'tourneyCardB').classList.add('winner');
+    tourney.winners.push(winner);
+    tourney.matchIdx++;
+    tourney.matchesDone++;
+    setTimeout(showTourneyMatch, 350);
+}
+
+function roundName(n) {
+    if (n >= 16) return '16강';
+    if (n >= 8) return '8강';
+    if (n >= 4) return '4강';
+    if (n >= 3) return '준결승';
+    return '결승';
+}
+
+function fmtDist(distance) {
+    const d = parseInt(distance);
+    return `📍 ${d >= 1000 ? (d / 1000).toFixed(1) + 'km' : d + 'm'}`;
 }
 
 function shade(hex, amt) {
