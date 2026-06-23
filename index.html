@@ -428,9 +428,13 @@ async function startSearch() {
     }
 }
 
+const TYPE_EXPAND = {
+    '동남아': ['베트남', '태국', '쌀국수', '동남아', '인도네시아'],
+};
+
 function fetchRestaurants() {
     const needed = state.count === 0 ? 8 : state.count;
-    const types = state.types;
+    const types = state.types.flatMap(t => TYPE_EXPAND[t] || [t]);
     if (types.length === 1) return fetchByType(types[0], needed);
     const perType = Math.ceil(needed / types.length);
     return Promise.all(types.map(t => fetchByType(t, perType))).then(results => {
