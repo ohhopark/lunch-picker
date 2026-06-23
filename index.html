@@ -178,6 +178,15 @@
             color: white; cursor: pointer;
             box-shadow: 0 4px 20px rgba(255,107,53,0.35);
         }
+        .btn-share {
+            width: 100%; padding: 14px;
+            background: transparent;
+            border: 2px solid rgba(74,158,255,0.4);
+            border-radius: 16px;
+            font-size: 14px; font-weight: 600;
+            color: #4a9eff; cursor: pointer;
+            margin-top: 10px;
+        }
         .btn-home {
             width: 100%; padding: 14px;
             background: transparent;
@@ -266,6 +275,7 @@
         <button class="btn-outline" onclick="goBack()">다시 뽑기</button>
         <button class="btn-filled" onclick="openMap()">지도 보기</button>
     </div>
+    <button class="btn-share" onclick="shareResult()">🔗 공유하기</button>
     <button class="btn-home" onclick="showScreen('filterScreen')">🏠 홈으로</button>
 </div>
 
@@ -450,6 +460,31 @@ function goBack() {
 function openMap() {
     const r = state.selected;
     window.open(`https://map.kakao.com/link/map/${encodeURIComponent(r.place_name)},${r.y},${r.x}`, '_blank');
+}
+
+async function shareResult() {
+    const r = state.selected;
+    const d = parseInt(r.distance);
+    const distText = d >= 1000 ? (d / 1000).toFixed(1) + 'km' : d + 'm';
+    const category = r.category_name?.split('>').pop().trim() || '음식점';
+    const mapUrl = `https://map.kakao.com/link/map/${encodeURIComponent(r.place_name)},${r.y},${r.x}`;
+    const text = `오늘 점심은 여기다! 🍱\n\n🍽️ ${r.place_name}\n📂 ${category}\n📍 ${r.road_address_name || r.address_name}\n📌 ${distText} 거리\n\n${mapUrl}`;
+
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: `오늘 점심은 ${r.place_name}!`, text });
+        } catch (e) {
+            if (e.name !== 'AbortError') fallbackCopy(text);
+        }
+    } else {
+        fallbackCopy(text);
+    }
+}
+
+function fallbackCopy(text) {
+    navigator.clipboard.writeText(text)
+        .then(() => alert('📋 클립보드에 복사됐어요!'))
+        .catch(() => alert('공유 내용:\n\n' + text));
 }
 
 // ════════════════════════════════════════
