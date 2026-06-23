@@ -214,6 +214,16 @@
         </div>
     </div>
 
+    <div class="section">
+        <div class="section-title">가게 수</div>
+        <div class="chip-group" id="countGroup">
+            <div class="chip selected" data-value="0">무관</div>
+            <div class="chip" data-value="10">10곳</div>
+            <div class="chip" data-value="20">20곳</div>
+            <div class="chip" data-value="30">30곳 이상</div>
+        </div>
+    </div>
+
     <button class="start-btn" onclick="startSearch()">📍 내 주변 음식점 찾기</button>
     <p style="text-align:center; color:rgba(255,255,255,0.25); font-size:12px; margin-top:20px;">만든이 오호 · 버전 1.0.0</p>
 </div>
@@ -250,6 +260,7 @@ const state = {
     type: '음식점',
     distance: 1000,
     format: 'roulette',
+    count: 0,
     restaurants: [],
     selected: null,
     lat: null,
@@ -269,6 +280,7 @@ function setupChips(groupId, key, isInt) {
 setupChips('typeGroup', 'type', false);
 setupChips('distanceGroup', 'distance', true);
 setupChips('formatGroup', 'format', false);
+setupChips('countGroup', 'count', true);
 
 // ── 화면 전환 ──
 function showScreen(id) {
@@ -293,7 +305,8 @@ async function startSearch() {
             return;
         }
 
-        state.restaurants = shuffle(list).slice(0, 8);
+        const take = state.count === 0 ? 8 : state.count;
+        state.restaurants = shuffle(list).slice(0, take);
         initAnimation();
         showScreen('animScreen');
     } catch (e) {
@@ -306,24 +319,46 @@ async function startSearch() {
 }
 
 function fetchRestaurants() {
+    const needed = state.count === 0 ? 8 : state.count;
+    const pageCount = Math.ceil(needed / 15);
+
     return new Promise((resolve, reject) => {
         const ps = new kakao.maps.services.Places();
-        const opts = {
+        const baseOpts = {
             location: new kakao.maps.LatLng(state.lat, state.lng),
             radius: state.distance,
             size: 15,
             sort: kakao.maps.services.SortBy.DISTANCE,
         };
-        const cb = (result, status) => {
-            if (status === kakao.maps.services.Status.OK) resolve(result);
-            else if (status === kakao.maps.services.Status.ZERO_RESULT) resolve([]);
-            else reject(new Error('장소 검색 실패'));
+
+        const results = [];
+        let page = 1;
+
+        const fetchPage = () => {
+            const opts = { ...baseOpts, page };
+            const cb = (result, status, pagination) => {
+                if (status === kakao.maps.services.Status.OK) {
+                    results.push(...result);
+                    if (page < pageCount && pagination.hasNextPage) {
+                        page++;
+                        fetchPage();
+                    } else {
+                        resolve(results);
+                    }
+                } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+                    resolve(results);
+                } else {
+                    reject(new Error('장소 검색 실패'));
+                }
+            };
+            if (state.type === '음식점') {
+                ps.categorySearch('FD6', cb, opts);
+            } else {
+                ps.keywordSearch(state.type, cb, { ...opts, category_group_code: 'FD6' });
+            }
         };
-        if (state.type === '음식점') {
-            ps.categorySearch('FD6', cb, opts);
-        } else {
-            ps.keywordSearch(state.type, cb, { ...opts, category_group_code: 'FD6' });
-        }
+
+        fetchPage();
     });
 }
 
