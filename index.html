@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>점심뭐먹지?</title>
+    <style>
+        :root {
+            --primary: #FF6B35;
+            --primary-light: rgba(255,107,53,0.15);
+            --bg: #0f0f1a;
+            --card: #1a1a2e;
+            --text: #ffffff;
+            --muted: rgba(255,255,255,0.5);
+            --border: rgba(255,255,255,0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .screen { display: none; flex-direction: column; min-height: 100vh; padding: 28px 20px 36px; max-width: 480px; margin: 0 auto; }
+        .screen.active { display: flex; }
+
+        /* ── FILTER SCREEN ── */
+        .logo { font-size: 40px; text-align: center; margin-bottom: 6px; }
+        h1 { font-size: 24px; font-weight: 800; text-align: center; }
+        .subtitle { text-align: center; color: var(--muted); font-size: 14px; margin: 6px 0 32px; }
+
+        .section { margin-bottom: 26px; }
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+        .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+        .chip {
+            padding: 9px 18px;
+            border-radius: 24px;
+            border: 2px solid var(--border);
+            background: var(--card);
+            color: var(--muted);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .chip.selected {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 18px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 18px;
+            font-size: 17px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: auto;
+            box-shadow: 0 8px 30px rgba(255,107,53,0.4);
+            letter-spacing: -0.3px;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .start-btn:active { transform: scale(0.98); box-shadow: 0 4px 15px rgba(255,107,53,0.3); }
+
+        /* ── LOADING SCREEN ── */
+        #loadingScreen {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            min-height: 100vh;
+            gap: 20px;
+        }
+        #loadingScreen.active { display: flex; }
+        .spinner {
+            width: 48px; height: 48px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: var(--muted); font-size: 15px; }
+
+        /* ── ANIM SCREEN ── */
+        #animScreen { align-items: center; justify-content: space-between; padding-top: 20px; }
+        .anim-title {
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        #gameCanvas { border-radius: 20px; display: block; }
+
+        .spin-btn {
+            width: 100%;
+            padding: 18px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 18px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 8px 30px rgba(255,107,53,0.4);
+            transition: transform 0.1s;
+            margin-top: 16px;
+        }
+        .spin-btn:active { transform: scale(0.98); }
+        .spin-btn:disabled { background: #333; box-shadow: none; color: var(--muted); cursor: default; }
+
+        /* ── RESULT SCREEN ── */
+        #resultScreen {
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 0;
+        }
+        .result-emoji { font-size: 72px; margin-bottom: 16px; }
+        .result-name { font-size: 28px; font-weight: 800; line-height: 1.2; margin-bottom: 14px; }
+        .result-category {
+            display: inline-block;
+            background: var(--primary-light);
+            color: var(--primary);
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 12px;
+            margin-bottom: 14px;
+        }
+        .result-address { color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px; }
+        .result-distance {
+            display: inline-block;
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 6px 16px;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--muted);
+            margin-bottom: 32px;
+        }
+        .result-actions { display: flex; gap: 12px; width: 100%; }
+        .btn-outline {
+            flex: 1; padding: 16px;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            font-size: 15px; font-weight: 700;
+            color: var(--text); cursor: pointer;
+        }
+        .btn-filled {
+            flex: 1; padding: 16px;
+            background: var(--primary);
+            border: none;
+            border-radius: 16px;
+            font-size: 15px; font-weight: 700;
+            color: white; cursor: pointer;
+            box-shadow: 0 4px 20px rgba(255,107,53,0.35);
+        }
+    </style>
+</head>
+<body>
+
+<!-- 필터 화면 -->
+<div id="filterScreen" class="screen active">
+    <div class="logo">🍱</div>
+    <h1>점심뭐먹지?</h1>
+    <p class="subtitle">오늘의 점심, 골라드릴게요</p>
+
+    <div class="section">
+        <div class="section-title">음식 종류</div>
+        <div class="chip-group" id="typeGroup">
+            <div class="chip selected" data-value="음식점">전체</div>
+            <div class="chip" data-value="한식">한식</div>
+            <div class="chip" data-value="중식">중식</div>
+            <div class="chip" data-value="일식">일식</div>
+            <div class="chip" data-value="양식">양식</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">검색 거리</div>
+        <div class="chip-group" id="distanceGroup">
+            <div class="chip selected" data-value="1000">1km 이내</div>
+            <div class="chip" data-value="3000">3km 이내</div>
+            <div class="chip" data-value="5000">5km 이내</div>
+            <div class="chip" data-value="10000">10km 이내</div>
+            <div class="chip" data-value="20000">그외</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">랜덤 방식</div>
+        <div class="chip-group" id="formatGroup">
+            <div class="chip selected" data-value="roulette">🎡 룰렛</div>
+            <div class="chip" data-value="pinball">🎳 핀볼</div>
+            <div class="chip" data-value="lotto">🎰 추첨기</div>
+        </div>
+    </div>
+
+    <button class="start-btn" onclick="startSearch()">📍 내 주변 음식점 찾기</button>
+</div>
+
+<!-- 로딩 화면 -->
+<div id="loadingScreen">
+    <div class="spinner"></div>
+    <p class="loading-text">근처 음식점을 찾고 있어요...</p>
+</div>
+
+<!-- 애니메이션 화면 -->
+<div id="animScreen" class="screen">
+    <div id="animTitle" class="anim-title">🎡 룰렛 돌리기</div>
+    <canvas id="gameCanvas"></canvas>
+    <button class="spin-btn" id="spinBtn" onclick="spin()">돌리기!</button>
+</div>
+
+<!-- 결과 화면 -->
+<div id="resultScreen" class="screen">
+    <div class="result-emoji">🎉</div>
+    <div class="result-name" id="resultName"></div>
+    <div class="result-category" id="resultCategory"></div>
+    <div class="result-address" id="resultAddress"></div>
+    <div class="result-distance" id="resultDistance"></div>
+    <div class="result-actions">
+        <button class="btn-outline" onclick="goBack()">다시 뽑기</button>
+        <button class="btn-filled" onclick="openMap()">지도 보기</button>
+    </div>
+</div>
+
+<script>
+const API_KEY = 'b3e1713c2796153bab6966317f36a43d';
+
+const state = {
+    type: '음식점',
+    distance: 1000,
+    format: 'roulette',
+    restaurants: [],
+    selected: null,
+    lat: null,
+    lng: null,
+};
+
+// ── 칩 선택 ──
+function setupChips(groupId, key, isInt) {
+    document.getElementById(groupId).querySelectorAll('.chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.getElementById(groupId).querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+            chip.classList.add('selected');
+            state[key] = isInt ? parseInt(chip.dataset.value) : chip.dataset.value;
+        });
+    });
+}
+setupChips('typeGroup', 'type', false);
+setupChips('distanceGroup', 'distance', true);
+setupChips('formatGroup', 'format', false);
+
+// ── 화면 전환 ──
+function showScreen(id) {
+    document.querySelectorAll('.screen, #loadingScreen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+// ── 검색 시작 ──
+async function startSearch() {
+    showScreen('loadingScreen');
+    try {
+        const pos = await new Promise((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
+        );
+        state.lat = pos.coords.latitude;
+        state.lng = pos.coords.longitude;
+
+        const list = await fetchRestaurants();
+        if (!list.length) {
+            alert('근처에 음식점이 없어요. 거리를 늘려보세요!');
+            showScreen('filterScreen');
+            return;
+        }
+
+        state.restaurants = shuffle(list).slice(0, 8);
+        initAnimation();
+        showScreen('animScreen');
+    } catch (e) {
+        const msg = e.code === 1
+            ? '위치 권한이 필요해요.\n브라우저 설정에서 위치를 허용해주세요.'
+            : '오류가 발생했어요: ' + e.message;
+        alert(msg);
+        showScreen('filterScreen');
+    }
+}
+
+async function fetchRestaurants() {
+    const url = `https://dapi.kakao.com/v2/local/search/keyword.json`
+        + `?query=${encodeURIComponent(state.type)}`
+        + `&x=${state.lng}&y=${state.lat}`
+        + `&radius=${state.distance}`
+        + `&category_group_code=FD6`
+        + `&size=15&sort=distance`;
+
+    const res = await fetch(url, { headers: { Authorization: `KakaoAK ${API_KEY}` } });
+    if (!res.ok) throw new Error('API 오류 ' + res.status);
+    const data = await res.json();
+    return data.documents || [];
+}
+
+function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+// ── 애니메이션 초기화 ──
+let animator = null;
+
+function initAnimation() {
+    const canvas = document.getElementById('gameCanvas');
+    const w = Math.min(window.innerWidth - 40, 420);
+    canvas.width = w;
+    canvas.height = state.format === 'pinball' ? Math.round(w * 1.15) : w;
+
+    const titles = { roulette: '🎡 룰렛 돌리기', pinball: '🎳 핀볼', lotto: '🎰 추첨기' };
+    document.getElementById('animTitle').textContent = titles[state.format];
+    const btn = document.getElementById('spinBtn');
+    btn.disabled = false;
+    btn.textContent = '돌리기!';
+
+    const cls = { roulette: Roulette, pinball: Pinball, lotto: Lotto }[state.format];
+    animator = new cls(canvas, state.restaurants);
+    animator.draw();
+}
+
+function spin() {
+    const btn = document.getElementById('spinBtn');
+    btn.disabled = true;
+    btn.textContent = '두근두근...';
+    const idx = Math.floor(Math.random() * state.restaurants.length);
+    state.selected = state.restaurants[idx];
+    animator.spin(idx, () => setTimeout(showResult, 700));
+}
+
+function showResult() {
+    const r = state.selected;
+    document.getElementById('resultName').textContent = r.place_name;
+    document.getElementById('resultCategory').textContent = r.category_name?.split('>').pop().trim() || '음식점';
+    document.getElementById('resultAddress').textContent = r.road_address_name || r.address_name;
+    const d = parseInt(r.distance);
+    document.getElementById('resultDistance').textContent = `📍 ${d >= 1000 ? (d / 1000).toFixed(1) + 'km' : d + 'm'} 거리`;
+    showScreen('resultScreen');
+}
+
+function goBack() {
+    initAnimation();
+    showScreen('animScreen');
+}
+
+function openMap() {
+    const r = state.selected;
+    window.open(`https://map.kakao.com/link/map/${encodeURIComponent(r.place_name)},${r.y},${r.x}`, '_blank');
+}
+
+// ════════════════════════════════════════
+// 🎡 룰렛
+// ════════════════════════════════════════
+class Roulette {
+    constructor(canvas, items) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.items = items;
+        this.angle = 0;
+        this.colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+    }
+
+    draw() {
+        const { ctx, canvas, items, angle, colors } = this;
+        const cx = canvas.width / 2, cy = canvas.height / 2;
+        const r = Math.min(cx, cy) - 28;
+        const n = items.length;
+        const slice = (2 * Math.PI) / n;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Outer ring shadow
+        ctx.save();
+        ctx.shadowColor = 'rgba(255,107,53,0.3)';
+        ctx.shadowBlur = 30;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 8, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(255,107,53,0.5)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.restore();
+
+        for (let i = 0; i < n; i++) {
+            const s = angle + i * slice, e = s + slice;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, r, s, e);
+            ctx.closePath();
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(s + slice / 2);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = 'rgba(255,255,255,0.95)';
+            ctx.font = `bold ${n > 6 ? 11 : 13}px -apple-system, sans-serif`;
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 3;
+            const name = items[i].place_name;
+            ctx.fillText(name.length > 7 ? name.slice(0, 6) + '…' : name, r - 14, 5);
+            ctx.restore();
+        }
+
+        // Center
+        ctx.beginPath();
+        ctx.arc(cx, cy, 24, 0, 2 * Math.PI);
+        ctx.fillStyle = '#0f0f1a';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 16, 0, 2 * Math.PI);
+        ctx.fillStyle = '#FF6B35';
+        ctx.fill();
+
+        // Pointer
+        ctx.save();
+        ctx.translate(cx, 6);
+        ctx.beginPath();
+        ctx.moveTo(-13, 0);
+        ctx.lineTo(13, 0);
+        ctx.lineTo(0, r - 14);
+        ctx.closePath();
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = 'rgba(255,107,53,0.6)';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.restore();
+    }
+
+    spin(selectedIndex, onComplete) {
+        const n = this.items.length;
+        const slice = (2 * Math.PI) / n;
+        const targetBase = -Math.PI / 2 - (selectedIndex * slice + slice / 2);
+        const norm = t => ((t % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        let diff = norm(targetBase) - norm(this.angle);
+        if (diff <= 0) diff += 2 * Math.PI;
+
+        const target = this.angle + 6 * 2 * Math.PI + diff;
+        const start = this.angle, t0 = Date.now(), dur = 5000;
+
+        const tick = () => {
+            const p = Math.min((Date.now() - t0) / dur, 1);
+            const ease = 1 - Math.pow(1 - p, 5);
+            this.angle = start + (target - start) * ease;
+            this.draw();
+            if (p < 1) requestAnimationFrame(tick);
+            else { this.angle = target; this.draw(); onComplete(); }
+        };
+        requestAnimationFrame(tick);
+    }
+}
+
+// ════════════════════════════════════════
+// 🎳 핀볼
+// ════════════════════════════════════════
+class Pinball {
+    constructor(canvas, items) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.items = items.slice(0, Math.min(items.length, 7));
+        this.pegs = [];
+        this.slots = [];
+        this.ball = null;
+        this.waypoints = [];
+        this.wpIdx = 0;
+        this.running = false;
+        this.targetSlot = -1;
+        this._build();
+    }
+
+    _build() {
+        const w = this.canvas.width, h = this.canvas.height;
+        const n = this.items.length;
+        const sw = w / n;
+        const topY = 70, botY = h - 90, rows = 7;
+        const rh = (botY - topY) / rows;
+
+        for (let row = 0; row < rows; row++) {
+            const even = row % 2 === 0;
+            const cols = even ? 5 : 4;
+            const sp = w / (cols + 1);
+            const ox = even ? sp : sp * 1.25;
+            for (let c = 0; c < cols; c++) {
+                this.pegs.push({ x: ox + c * sp, y: topY + row * rh, r: 7 });
+            }
+        }
+        for (let i = 0; i < n; i++) {
+            this.slots.push({ x: sw * i + sw / 2, y: h - 50, w: sw - 4, label: this.items[i].place_name });
+        }
+    }
+
+    draw(ballPos) {
+        const { ctx, canvas, pegs, slots } = this;
+        const w = canvas.width, h = canvas.height;
+        const n = slots.length, sw = w / n;
+
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#0d0d1a';
+        ctx.fillRect(0, 0, w, h);
+
+        // Slot separators + labels
+        for (let i = 0; i < n; i++) {
+            const x = i * sw;
+            const isWinner = i === this.targetSlot && ballPos?.landed;
+            ctx.fillStyle = isWinner ? 'rgba(255,107,53,0.25)' : 'rgba(255,255,255,0.05)';
+            ctx.fillRect(x + 2, h - 85, sw - 4, 85);
+            if (i > 0) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(x, h - 85); ctx.lineTo(x, h); ctx.stroke();
+            }
+            ctx.fillStyle = isWinner ? '#FF6B35' : 'rgba(255,255,255,0.4)';
+            ctx.font = `bold ${sw > 55 ? 11 : 9}px -apple-system, sans-serif`;
+            ctx.textAlign = 'center';
+            const lbl = slots[i].label;
+            ctx.fillText(lbl.length > 4 ? lbl.slice(0, 4) + '..' : lbl, slots[i].x, h - 30);
+        }
+
+        // Pegs
+        pegs.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, 2 * Math.PI);
+            ctx.fillStyle = '#4a9eff';
+            ctx.shadowColor = '#4a9eff';
+            ctx.shadowBlur = 8;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        });
+
+        // Ball
+        if (ballPos) {
+            const g = ctx.createRadialGradient(ballPos.x - 5, ballPos.y - 5, 2, ballPos.x, ballPos.y, 14);
+            g.addColorStop(0, '#fff');
+            g.addColorStop(0.4, '#FF6B35');
+            g.addColorStop(1, '#c0392b');
+            ctx.beginPath();
+            ctx.arc(ballPos.x, ballPos.y, 13, 0, 2 * Math.PI);
+            ctx.fillStyle = g;
+            ctx.shadowColor = '#FF6B35';
+            ctx.shadowBlur = 18;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    _buildWaypoints(targetSlot) {
+        const w = this.canvas.width, h = this.canvas.height;
+        const n = this.items.length, sw = w / n;
+        const targetX = this.slots[targetSlot].x;
+        const topY = 70, botY = h - 90, rows = 7, rh = (botY - topY) / rows;
+        const pts = [{ x: w / 2, y: 25 }];
+
+        let cx = w / 2;
+        for (let row = 0; row < rows; row++) {
+            const y = topY + row * rh;
+            const rowPegs = this.pegs.filter(p => Math.abs(p.y - y) < 5);
+            if (!rowPegs.length) continue;
+            const t = row / rows;
+            const drift = cx + (targetX - cx) * (0.15 + t * 0.25) * (0.6 + Math.random() * 0.8);
+            const near = rowPegs.reduce((b, p) => Math.abs(p.x - drift) < Math.abs(b.x - drift) ? p : b);
+            cx = drift > near.x
+                ? Math.min(w - sw * 0.5, near.x + 22 + Math.random() * 12)
+                : Math.max(sw * 0.5, near.x - 22 - Math.random() * 12);
+            pts.push({ x: near.x, y });
+            pts.push({ x: cx, y: y + rh * 0.45 });
+        }
+        pts.push({ x: targetX, y: botY + 5 });
+        pts.push({ x: targetX, y: h - 60, landed: true });
+        return pts;
+    }
+
+    spin(selectedIndex, onComplete) {
+        this.targetSlot = selectedIndex;
+        this.waypoints = this._buildWaypoints(selectedIndex);
+        this.wpIdx = 0;
+        this.ball = { x: this.waypoints[0].x, y: this.waypoints[0].y, landed: false };
+        this.running = true;
+        this._next(onComplete);
+    }
+
+    _next(onComplete) {
+        if (this.wpIdx >= this.waypoints.length - 1) {
+            this.ball.landed = true;
+            this.draw(this.ball);
+            this.running = false;
+            setTimeout(onComplete, 300);
+            return;
+        }
+        const from = this.waypoints[this.wpIdx];
+        const to = this.waypoints[this.wpIdx + 1];
+        const dx = to.x - from.x, dy = to.y - from.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const steps = Math.max(1, Math.ceil(dist / 4.5));
+        let step = 0;
+        const go = () => {
+            step++;
+            const t = step / steps;
+            this.ball.x = from.x + dx * t;
+            this.ball.y = from.y + dy * t;
+            this.draw(this.ball);
+            if (step >= steps) { this.wpIdx++; this._next(onComplete); }
+            else requestAnimationFrame(go);
+        };
+        requestAnimationFrame(go);
+    }
+}
+
+// ════════════════════════════════════════
+// 🎰 추첨기
+// ════════════════════════════════════════
+class Lotto {
+    constructor(canvas, items) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.items = items;
+        this.colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+        this.balls = [];
+        this.phase = 'idle';
+        this.selectedIdx = -1;
+        this.exitY = 0;
+        this.exitBall = null;
+        this._init();
+    }
+
+    _init() {
+        const w = this.canvas.width, h = this.canvas.height;
+        const cx = w / 2, cy = h / 2 + 30;
+        const cr = Math.min(w, h) * 0.33;
+        this.cx = cx; this.cy = cy; this.cr = cr;
+        this.exitY = cy - cr;
+
+        this.balls = this.items.map((item, i) => {
+            const a = (i / this.items.length) * 2 * Math.PI;
+            return {
+                x: cx + Math.cos(a) * cr * 0.45,
+                y: cy + Math.sin(a) * cr * 0.45,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4,
+                r: 22,
+                color: this.colors[i % this.colors.length],
+                idx: i,
+                label: item.place_name.slice(0, 2),
+            };
+        });
+    }
+
+    _update() {
+        const { cx, cy, cr, balls } = this;
+        balls.forEach(b => {
+            b.x += b.vx; b.y += b.vy;
+            const dx = b.x - cx, dy = b.y - cy;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d + b.r > cr) {
+                const nx = dx / d, ny = dy / d;
+                const dot = b.vx * nx + b.vy * ny;
+                b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny;
+                b.x = cx + nx * (cr - b.r); b.y = cy + ny * (cr - b.r);
+            }
+        });
+        for (let i = 0; i < balls.length; i++) {
+            for (let j = i + 1; j < balls.length; j++) {
+                const a = balls[i], bb2 = balls[j];
+                const dx = bb2.x - a.x, dy = bb2.y - a.y;
+                const d = Math.sqrt(dx * dx + dy * dy);
+                if (d < a.r + bb2.r && d > 0) {
+                    const nx = dx / d, ny = dy / d;
+                    const ov = (a.r + bb2.r - d) / 2;
+                    a.x -= nx * ov; a.y -= ny * ov;
+                    bb2.x += nx * ov; bb2.y += ny * ov;
+                    const dv = (a.vx - bb2.vx) * nx + (a.vy - bb2.vy) * ny;
+                    a.vx -= dv * nx; a.vy -= dv * ny;
+                    bb2.vx += dv * nx; bb2.vy += dv * ny;
+                }
+            }
+        }
+    }
+
+    draw() {
+        const { ctx, canvas, balls, cx, cy, cr } = this;
+        const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#0d0d1a';
+        ctx.fillRect(0, 0, w, h);
+
+        // Tube
+        ctx.fillStyle = '#1a1a3e';
+        ctx.fillRect(cx - 26, 0, 52, cy - cr + 12);
+        ctx.strokeStyle = '#4a9eff';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(cx - 26, 0, 52, cy - cr + 12);
+
+        // Chamber
+        ctx.beginPath();
+        ctx.arc(cx, cy, cr, 0, 2 * Math.PI);
+        ctx.fillStyle = '#16213e';
+        ctx.fill();
+        ctx.strokeStyle = '#4a9eff';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#4a9eff';
+        ctx.shadowBlur = 15;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Balls
+        balls.forEach(b => {
+            if (this.exitBall && b.idx === this.exitBall.idx) return;
+            const g = ctx.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.35, 2, b.x, b.y, b.r);
+            g.addColorStop(0, '#fff');
+            g.addColorStop(0.35, b.color);
+            g.addColorStop(1, shade(b.color, -50));
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r, 0, 2 * Math.PI);
+            ctx.fillStyle = g; ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(b.label, b.x, b.y);
+        });
+
+        // Exiting ball
+        if (this.exitBall) {
+            const b = this.exitBall;
+            const g = ctx.createRadialGradient(cx - b.r * 0.3, this.exitY - b.r * 0.35, 2, cx, this.exitY, b.r);
+            g.addColorStop(0, '#fff');
+            g.addColorStop(0.35, '#FF6B35');
+            g.addColorStop(1, '#c0392b');
+            ctx.beginPath();
+            ctx.arc(cx, this.exitY, b.r, 0, 2 * Math.PI);
+            ctx.fillStyle = g;
+            ctx.shadowColor = '#FF6B35';
+            ctx.shadowBlur = 25;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 11px -apple-system,sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(b.label, cx, this.exitY);
+        }
+
+        // Winner label
+        if (this.phase === 'done') {
+            ctx.fillStyle = 'rgba(255,107,53,0.9)';
+            ctx.font = 'bold 16px -apple-system,sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.fillText('🎉 ' + this.items[this.selectedIdx].place_name, cx, h - 40);
+        }
+    }
+
+    spin(selectedIndex, onComplete) {
+        this.selectedIdx = selectedIndex;
+        this.phase = 'bouncing';
+        this.exitY = this.cy - this.cr;
+        const t0 = Date.now();
+
+        const bounce = () => {
+            this._update();
+            this.draw();
+            if (Date.now() - t0 < 3000) {
+                requestAnimationFrame(bounce);
+            } else {
+                this.exitBall = this.balls.find(b => b.idx === selectedIndex);
+                this.phase = 'exit';
+                exit();
+            }
+        };
+
+        const exit = () => {
+            this._update();
+            this.exitY -= 6;
+            this.draw();
+            if (this.exitY > 28) {
+                requestAnimationFrame(exit);
+            } else {
+                this.exitY = 28;
+                this.phase = 'done';
+                this.draw();
+                setTimeout(onComplete, 400);
+            }
+        };
+
+        requestAnimationFrame(bounce);
+    }
+}
+
+function shade(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.max(0, Math.min(255, (n >> 16) + amt));
+    const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amt));
+    const b = Math.max(0, Math.min(255, (n & 0xff) + amt));
+    return `rgb(${r},${g},${b})`;
+}
+</script>
+</body>
+</html>
