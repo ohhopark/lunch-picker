@@ -178,6 +178,15 @@
             color: white; cursor: pointer;
             box-shadow: 0 4px 20px rgba(255,107,53,0.35);
         }
+        .btn-home {
+            width: 100%; padding: 14px;
+            background: transparent;
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            font-size: 14px; font-weight: 600;
+            color: var(--muted); cursor: pointer;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -257,6 +266,7 @@
         <button class="btn-outline" onclick="goBack()">다시 뽑기</button>
         <button class="btn-filled" onclick="openMap()">지도 보기</button>
     </div>
+    <button class="btn-home" onclick="showScreen('filterScreen')">🏠 홈으로</button>
 </div>
 
 <script>
