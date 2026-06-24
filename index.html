@@ -500,7 +500,7 @@ function initAnimation() {
     const canvas = document.getElementById('gameCanvas');
     const w = Math.min(window.innerWidth - 40, 420);
     canvas.width = w;
-    canvas.height = state.format === 'pinball' ? Math.round(w * 1.15) : state.format === 'lotto' ? Math.round(w * 1.4) : w;
+    canvas.height = state.format === 'pinball' ? Math.round(w * 1.15) : state.format === 'lotto' ? Math.round(w * 1.6) : w;
 
     const titles = { roulette: '🎡 룰렛 돌리기', pinball: '🎳 핀볼', lotto: '🎰 추첨기' };
     document.getElementById('animTitle').textContent = titles[state.format];
@@ -854,7 +854,7 @@ class Lotto {
     _init() {
         const w = this.canvas.width, h = this.canvas.height;
         const cx = w / 2, cy = h / 2 + 20;
-        const cr = Math.min(w, h) * 0.4;
+        const cr = Math.min(w, h) * 0.44;
         this.cx = cx; this.cy = cy; this.cr = cr;
         this.exitY = cy - cr;
 
@@ -863,8 +863,8 @@ class Lotto {
             return {
                 x: cx + Math.cos(a) * cr * 0.45,
                 y: cy + Math.sin(a) * cr * 0.45,
-                vx: (Math.random() - 0.5) * 4,
-                vy: (Math.random() - 0.5) * 4,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
                 r: 28,
                 color: this.colors[i % this.colors.length],
                 idx: i,
