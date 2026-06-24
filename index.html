@@ -885,13 +885,19 @@ class Lotto {
 
     _update() {
         const { cx, cy, R, balls } = this;
-        // Use inscribed circle (apothem) for collision — polygon edges cause tunneling at corners
         const cr = R * 0.93;
         balls.forEach(b => {
-            b.vy += 0.18;
-            // cap speed to prevent tunneling
+            // 중력 없음 — 로또 추첨기처럼 사방으로 튕기게
             const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-            if (spd > 13) { b.vx = b.vx / spd * 13; b.vy = b.vy / spd * 13; }
+            // 너무 느려지면 에너지 주입 (실제 기계의 모터/공기 효과)
+            if (spd < 3) {
+                const a = Math.random() * 2 * Math.PI;
+                b.vx += Math.cos(a) * 5;
+                b.vy += Math.sin(a) * 5;
+            } else if (spd > 13) {
+                b.vx = b.vx / spd * 13;
+                b.vy = b.vy / spd * 13;
+            }
             b.x += b.vx; b.y += b.vy;
             const dx = b.x - cx, dy = b.y - cy;
             const d = Math.sqrt(dx * dx + dy * dy);
@@ -900,7 +906,8 @@ class Lotto {
                 b.x = cx + nx * (cr - b.r);
                 b.y = cy + ny * (cr - b.r);
                 const dot = b.vx * nx + b.vy * ny;
-                if (dot > 0) { b.vx -= 2 * dot * nx * 0.72; b.vy -= 2 * dot * ny * 0.72; }
+                // 완전 탄성 반사 — 에너지 손실 없이 튕김
+                if (dot > 0) { b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny; }
             }
         });
         for (let i = 0; i < balls.length; i++) {
@@ -914,7 +921,7 @@ class Lotto {
                     a.x -= nx * ov; a.y -= ny * ov;
                     b2.x += nx * ov; b2.y += ny * ov;
                     const dv = (a.vx - b2.vx) * nx + (a.vy - b2.vy) * ny;
-                    if (dv > 0) { a.vx -= dv * nx * 0.8; a.vy -= dv * ny * 0.8; b2.vx += dv * nx * 0.8; b2.vy += dv * ny * 0.8; }
+                    if (dv > 0) { a.vx -= dv * nx; a.vy -= dv * ny; b2.vx += dv * nx; b2.vy += dv * ny; }
                 }
             }
         }
