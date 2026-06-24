@@ -842,30 +842,32 @@ class Lotto {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.items = items;
-        this.colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+        this.colors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#FF6B35','#00bcd4'];
         this.balls = [];
         this.phase = 'idle';
         this.selectedIdx = -1;
-        this.exitY = 0;
         this.exitBall = null;
+        this.exitProgress = 0;
         this._init();
     }
 
     _init() {
         const w = this.canvas.width, h = this.canvas.height;
-        const cx = w / 2, cy = h / 2 + 20;
-        const cr = Math.min(w, h) * 0.44;
-        this.cx = cx; this.cy = cy; this.cr = cr;
-        this.exitY = cy - cr;
-
+        this.sides = 10;
+        this.cx = w / 2;
+        this.cy = h * 0.42;
+        this.R = w * 0.38;
+        const br = Math.max(18, Math.min(26, this.R * 0.17));
+        this.br = br;
         this.balls = this.items.map((item, i) => {
             const a = (i / this.items.length) * 2 * Math.PI;
+            const dist = this.R * 0.28 * Math.sqrt(Math.random());
             return {
-                x: cx + Math.cos(a) * cr * 0.45,
-                y: cy + Math.sin(a) * cr * 0.45,
-                vx: (Math.random() - 0.5) * 8,
-                vy: (Math.random() - 0.5) * 8,
-                r: 28,
+                x: this.cx + Math.cos(a) * dist,
+                y: this.cy + Math.sin(a) * dist,
+                vx: (Math.random() - 0.5) * 9,
+                vy: (Math.random() - 0.5) * 9,
+                r: br,
                 color: this.colors[i % this.colors.length],
                 idx: i,
                 label: item.place_name.slice(0, 2),
@@ -873,138 +875,187 @@ class Lotto {
         });
     }
 
+    _verts() {
+        const { cx, cy, R, sides } = this;
+        return Array.from({ length: sides }, (_, i) => {
+            const a = (2 * Math.PI * i / sides) - Math.PI / 2;
+            return { x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
+        });
+    }
+
     _update() {
-        const { cx, cy, cr, balls } = this;
+        const { cx, cy, balls } = this;
+        const verts = this._verts(), n = verts.length;
         balls.forEach(b => {
+            b.vy += 0.2;
             b.x += b.vx; b.y += b.vy;
-            const dx = b.x - cx, dy = b.y - cy;
-            const d = Math.sqrt(dx * dx + dy * dy);
-            if (d + b.r > cr) {
-                const nx = dx / d, ny = dy / d;
-                const dot = b.vx * nx + b.vy * ny;
-                b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny;
-                b.x = cx + nx * (cr - b.r); b.y = cy + ny * (cr - b.r);
+            for (let i = 0; i < n; i++) {
+                const v1 = verts[i], v2 = verts[(i + 1) % n];
+                const ex = v2.x - v1.x, ey = v2.y - v1.y;
+                const len = Math.sqrt(ex * ex + ey * ey);
+                let nx = -ey / len, ny = ex / len;
+                if (nx * (cx - v1.x) + ny * (cy - v1.y) < 0) { nx = -nx; ny = -ny; }
+                const dx = b.x - v1.x, dy = b.y - v1.y;
+                const dist = dx * nx + dy * ny;
+                if (dist < b.r) {
+                    const t = (dx * ex + dy * ey) / (len * len);
+                    if (t >= -0.05 && t <= 1.05) {
+                        b.x += nx * (b.r - dist); b.y += ny * (b.r - dist);
+                        const dot = b.vx * nx + b.vy * ny;
+                        if (dot < 0) { b.vx -= 2 * dot * nx * 0.78; b.vy -= 2 * dot * ny * 0.78; }
+                    }
+                }
             }
         });
         for (let i = 0; i < balls.length; i++) {
             for (let j = i + 1; j < balls.length; j++) {
-                const a = balls[i], bb2 = balls[j];
-                const dx = bb2.x - a.x, dy = bb2.y - a.y;
+                const a = balls[i], b2 = balls[j];
+                const dx = b2.x - a.x, dy = b2.y - a.y;
                 const d = Math.sqrt(dx * dx + dy * dy);
-                if (d < a.r + bb2.r && d > 0) {
+                if (d < a.r + b2.r && d > 0) {
                     const nx = dx / d, ny = dy / d;
-                    const ov = (a.r + bb2.r - d) / 2;
+                    const ov = (a.r + b2.r - d) / 2;
                     a.x -= nx * ov; a.y -= ny * ov;
-                    bb2.x += nx * ov; bb2.y += ny * ov;
-                    const dv = (a.vx - bb2.vx) * nx + (a.vy - bb2.vy) * ny;
-                    a.vx -= dv * nx; a.vy -= dv * ny;
-                    bb2.vx += dv * nx; bb2.vy += dv * ny;
+                    b2.x += nx * ov; b2.y += ny * ov;
+                    const dv = (a.vx - b2.vx) * nx + (a.vy - b2.vy) * ny;
+                    if (dv > 0) { a.vx -= dv * nx * 0.8; a.vy -= dv * ny * 0.8; b2.vx += dv * nx * 0.8; b2.vy += dv * ny * 0.8; }
                 }
             }
         }
     }
 
+    _polyPath() {
+        const ctx = this.ctx, verts = this._verts();
+        ctx.beginPath();
+        verts.forEach((v, i) => i === 0 ? ctx.moveTo(v.x, v.y) : ctx.lineTo(v.x, v.y));
+        ctx.closePath();
+    }
+
+    _drawBall(x, y, r, color, label, glow) {
+        const ctx = this.ctx;
+        const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, 1, x, y, r);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.25, '#ffffff');
+        g.addColorStop(0.55, color); g.addColorStop(1, shade(color, -60));
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = g;
+        if (glow) { ctx.shadowColor = '#FF6B35'; ctx.shadowBlur = 22; }
+        ctx.fill(); ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.font = `bold ${Math.round(r * 0.58)}px -apple-system,sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, x, y);
+    }
+
     draw() {
-        const { ctx, canvas, balls, cx, cy, cr } = this;
+        const { ctx, canvas, cx, cy, R } = this;
         const w = canvas.width, h = canvas.height;
         ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = '#0d0d1a';
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#0d0d1a'; ctx.fillRect(0, 0, w, h);
 
-        // Tube
-        ctx.fillStyle = '#1a1a3e';
-        ctx.fillRect(cx - 26, 0, 52, cy - cr + 12);
-        ctx.strokeStyle = '#4a9eff';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(cx - 26, 0, 52, cy - cr + 12);
+        this._drawStand();
 
-        // Chamber
-        ctx.beginPath();
-        ctx.arc(cx, cy, cr, 0, 2 * Math.PI);
-        ctx.fillStyle = '#16213e';
-        ctx.fill();
-        ctx.strokeStyle = '#4a9eff';
-        ctx.lineWidth = 4;
-        ctx.shadowColor = '#4a9eff';
-        ctx.shadowBlur = 15;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        // Container fill
+        this._polyPath(); ctx.fillStyle = '#0e1530'; ctx.fill();
 
-        // Balls
-        balls.forEach(b => {
+        // Balls (clipped inside polygon)
+        ctx.save();
+        this._polyPath(); ctx.clip();
+        this.balls.forEach(b => {
             if (this.exitBall && b.idx === this.exitBall.idx) return;
-            const g = ctx.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.35, 2, b.x, b.y, b.r);
-            g.addColorStop(0, '#fff');
-            g.addColorStop(0.35, b.color);
-            g.addColorStop(1, shade(b.color, -50));
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.r, 0, 2 * Math.PI);
-            ctx.fillStyle = g; ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 11px -apple-system,sans-serif';
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(b.label, b.x, b.y);
+            this._drawBall(b.x, b.y, b.r, b.color, b.label, false);
         });
+        ctx.restore();
 
-        // Exiting ball
-        if (this.exitBall) {
-            const b = this.exitBall;
-            const g = ctx.createRadialGradient(cx - b.r * 0.3, this.exitY - b.r * 0.35, 2, cx, this.exitY, b.r);
-            g.addColorStop(0, '#fff');
-            g.addColorStop(0.35, '#FF6B35');
-            g.addColorStop(1, '#c0392b');
-            ctx.beginPath();
-            ctx.arc(cx, this.exitY, b.r, 0, 2 * Math.PI);
-            ctx.fillStyle = g;
-            ctx.shadowColor = '#FF6B35';
-            ctx.shadowBlur = 25;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 11px -apple-system,sans-serif';
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(b.label, cx, this.exitY);
-        }
+        // Polygon border (drawn on top)
+        this._polyPath();
+        ctx.strokeStyle = 'rgba(190,220,255,0.9)'; ctx.lineWidth = 5;
+        ctx.shadowColor = '#5ab0ff'; ctx.shadowBlur = 16; ctx.stroke(); ctx.shadowBlur = 0;
+        this._polyPath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1.5; ctx.stroke();
 
-        // Winner label
+        this._drawTopTube();
+        this._drawExitSlide();
+
         if (this.phase === 'done') {
-            ctx.fillStyle = 'rgba(255,107,53,0.9)';
-            ctx.font = 'bold 16px -apple-system,sans-serif';
-            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-            ctx.fillText('🎉 ' + this.items[this.selectedIdx].place_name, cx, h - 40);
+            ctx.fillStyle = 'rgba(255,107,53,0.95)';
+            ctx.font = 'bold 15px -apple-system,sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('🎉 ' + this.items[this.selectedIdx].place_name, cx, Math.min(cy + R * 1.22 + this.br + 14, h - 16));
+        }
+    }
+
+    _drawStand() {
+        const { ctx, cx, cy, R, canvas } = this;
+        const h = canvas.height, w = canvas.width;
+        const botY = cy + R;
+        const pedW = 44;
+        const pedGrad = ctx.createLinearGradient(cx - pedW / 2, 0, cx + pedW / 2, 0);
+        pedGrad.addColorStop(0, '#0a0a18'); pedGrad.addColorStop(0.38, '#20204a');
+        pedGrad.addColorStop(0.62, '#20204a'); pedGrad.addColorStop(1, '#0a0a18');
+        ctx.fillStyle = pedGrad;
+        ctx.fillRect(cx - pedW / 2, botY + 6, pedW, h - 34 - botY - 6);
+        const bx = cx - w * 0.31, by = h - 34;
+        const bGrad = ctx.createLinearGradient(bx, by, bx, by + 24);
+        bGrad.addColorStop(0, '#252550'); bGrad.addColorStop(1, '#0c0c20');
+        ctx.fillStyle = bGrad;
+        ctx.beginPath(); ctx.roundRect(bx, by, w * 0.62, 24, [4, 4, 10, 10]); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    _drawTopTube() {
+        const { ctx, cx, cy, R } = this;
+        const topY = cy - R, tw = 26, th = 38;
+        ctx.fillStyle = 'rgba(40,80,150,0.35)';
+        ctx.fillRect(cx - tw / 2, topY - th, tw, th + 3);
+        ctx.strokeStyle = 'rgba(190,220,255,0.75)'; ctx.lineWidth = 2;
+        ctx.strokeRect(cx - tw / 2, topY - th, tw, th + 3);
+        ctx.fillStyle = '#181838';
+        ctx.beginPath(); ctx.roundRect(cx - tw * 0.88, topY - th - 10, tw * 1.76, 10, 3); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+
+    _drawExitSlide() {
+        const { ctx, cx, cy, R, br, exitBall, exitProgress } = this;
+        // Exit opening at right side of container, slide goes down-right
+        const ox = cx + R * 0.54, oy = cy + R * 0.82;
+        const ex = cx + R * 0.95, ey = cy + R * 1.08;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(190,220,255,0.55)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(ox - 3, oy + br + 3); ctx.lineTo(ex + 8, ey + br + 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ox + 2, oy - br + 6); ctx.lineTo(ex + 8, ey - br + 6); ctx.stroke();
+        ctx.restore();
+        if (exitBall) {
+            const t = exitProgress;
+            const bx = ox + (ex - ox) * t, by = oy + (ey - oy) * t + 7;
+            this._drawBall(bx, by, br, '#FF6B35', exitBall.label, true);
         }
     }
 
     spin(selectedIndex, onComplete) {
         this.selectedIdx = selectedIndex;
         this.phase = 'bouncing';
-        this.exitY = this.cy - this.cr;
+        this.exitBall = null;
+        this.exitProgress = 0;
         const t0 = Date.now();
+        this.balls.forEach(b => {
+            b.vx = (Math.random() - 0.5) * 11;
+            b.vy = (Math.random() - 0.5) * 11;
+        });
 
         const bounce = () => {
-            this._update();
-            this.draw();
-            if (Date.now() - t0 < 3000) {
-                requestAnimationFrame(bounce);
-            } else {
+            this._update(); this.draw();
+            if (Date.now() - t0 < 3000) requestAnimationFrame(bounce);
+            else {
                 this.exitBall = this.balls.find(b => b.idx === selectedIndex);
-                this.phase = 'exit';
-                exit();
+                this.phase = 'exit'; exit();
             }
         };
 
         const exit = () => {
-            this._update();
-            this.exitY -= 6;
-            this.draw();
-            if (this.exitY > 28) {
-                requestAnimationFrame(exit);
-            } else {
-                this.exitY = 28;
-                this.phase = 'done';
-                this.draw();
-                setTimeout(onComplete, 400);
-            }
+            this.exitProgress = Math.min(1, this.exitProgress + 0.027);
+            this._update(); this.draw();
+            if (this.exitProgress < 1) requestAnimationFrame(exit);
+            else { this.phase = 'done'; this.draw(); setTimeout(onComplete, 500); }
         };
 
         requestAnimationFrame(bounce);
