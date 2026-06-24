@@ -884,27 +884,23 @@ class Lotto {
     }
 
     _update() {
-        const { cx, cy, balls } = this;
-        const verts = this._verts(), n = verts.length;
+        const { cx, cy, R, balls } = this;
+        // Use inscribed circle (apothem) for collision — polygon edges cause tunneling at corners
+        const cr = R * 0.93;
         balls.forEach(b => {
-            b.vy += 0.2;
+            b.vy += 0.18;
+            // cap speed to prevent tunneling
+            const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+            if (spd > 13) { b.vx = b.vx / spd * 13; b.vy = b.vy / spd * 13; }
             b.x += b.vx; b.y += b.vy;
-            for (let i = 0; i < n; i++) {
-                const v1 = verts[i], v2 = verts[(i + 1) % n];
-                const ex = v2.x - v1.x, ey = v2.y - v1.y;
-                const len = Math.sqrt(ex * ex + ey * ey);
-                let nx = -ey / len, ny = ex / len;
-                if (nx * (cx - v1.x) + ny * (cy - v1.y) < 0) { nx = -nx; ny = -ny; }
-                const dx = b.x - v1.x, dy = b.y - v1.y;
-                const dist = dx * nx + dy * ny;
-                if (dist < b.r) {
-                    const t = (dx * ex + dy * ey) / (len * len);
-                    if (t >= -0.05 && t <= 1.05) {
-                        b.x += nx * (b.r - dist); b.y += ny * (b.r - dist);
-                        const dot = b.vx * nx + b.vy * ny;
-                        if (dot < 0) { b.vx -= 2 * dot * nx * 0.78; b.vy -= 2 * dot * ny * 0.78; }
-                    }
-                }
+            const dx = b.x - cx, dy = b.y - cy;
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if (d + b.r > cr) {
+                const nx = dx / d, ny = dy / d;
+                b.x = cx + nx * (cr - b.r);
+                b.y = cy + ny * (cr - b.r);
+                const dot = b.vx * nx + b.vy * ny;
+                if (dot > 0) { b.vx -= 2 * dot * nx * 0.72; b.vy -= 2 * dot * ny * 0.72; }
             }
         });
         for (let i = 0; i < balls.length; i++) {
