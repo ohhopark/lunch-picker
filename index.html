@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -500,9 +500,9 @@ function initAnimation() {
     const canvas = document.getElementById('gameCanvas');
     const w = Math.min(window.innerWidth - 40, 420);
     canvas.width = w;
-    canvas.height = state.format === 'pinball' ? Math.round(w * 1.15) : state.format === 'lotto' ? Math.round(w * 1.25) : w;
+    canvas.height = state.format === 'pinball' ? Math.round(w * 1.5) : state.format === 'lotto' ? Math.round(w * 1.25) : w;
 
-    const titles = { roulette: '🎡 룰렛 돌리기', pinball: '🎳 핀볼', lotto: '🎰 추첨기' };
+    const titles = { roulette: '🎡 룰렛 돌리기', pinball: '🎳 핀볼 레이스', lotto: '🎰 추첨기' };
     document.getElementById('animTitle').textContent = titles[state.format];
     const btn = document.getElementById('spinBtn');
     btn.disabled = false;
@@ -677,160 +677,271 @@ class Roulette {
 }
 
 // ════════════════════════════════════════
-// 🎳 핀볼
+// 🎳 핀볼 레이스
 // ════════════════════════════════════════
 class Pinball {
     constructor(canvas, items) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.items = items.slice(0, Math.min(items.length, 7));
+        this.items = items.slice(0, Math.min(items.length, 8));
         this.pegs = [];
-        this.slots = [];
-        this.ball = null;
-        this.waypoints = [];
-        this.wpIdx = 0;
-        this.running = false;
-        this.targetSlot = -1;
-        this._build();
+        this.balls = [];
+        this.targetIdx = -1;
+        this.rankCounter = 0;
+        this.colors = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFD93D','#C77DFF','#7BF1A8','#FF9A3C'];
+        this._buildPegs();
+        this._initDisplay();
     }
 
-    _build() {
+    _buildPegs() {
         const w = this.canvas.width, h = this.canvas.height;
-        const n = this.items.length;
-        const sw = w / n;
-        const topY = 70, botY = h - 90, rows = 7;
+        const finishY = h - 120;
+        const topY = 95, botY = finishY - 30;
+        const rows = 9;
         const rh = (botY - topY) / rows;
-
         for (let row = 0; row < rows; row++) {
             const even = row % 2 === 0;
-            const cols = even ? 5 : 4;
+            const cols = even ? 6 : 5;
             const sp = w / (cols + 1);
-            const ox = even ? sp : sp * 1.25;
+            const startX = even ? sp : sp * 1.5;
             for (let c = 0; c < cols; c++) {
-                this.pegs.push({ x: ox + c * sp, y: topY + row * rh, r: 7 });
+                this.pegs.push({ x: startX + c * sp, y: topY + row * rh, r: 6 });
             }
-        }
-        for (let i = 0; i < n; i++) {
-            this.slots.push({ x: sw * i + sw / 2, y: h - 50, w: sw - 4, label: this.items[i].place_name });
         }
     }
 
-    draw(ballPos) {
-        const { ctx, canvas, pegs, slots } = this;
+    _initDisplay() {
+        const w = this.canvas.width;
+        const n = this.items.length;
+        this.balls = this.items.map((item, i) => ({
+            x: (w / (n + 1)) * (i + 1), y: 28 + (i % 2) * 12,
+            vx: 0, vy: 0, r: 11,
+            color: this.colors[i % this.colors.length],
+            label: item.place_name.slice(0, 2),
+            fullName: item.place_name,
+            idx: i, isWinner: false, finished: false, rank: null, trail: [],
+        }));
+    }
+
+    _initBalls(selectedIndex) {
+        const w = this.canvas.width;
+        const n = this.items.length;
+        this.targetIdx = selectedIndex;
+        this.rankCounter = 0;
+        this.balls = this.items.map((item, i) => ({
+            x: (w / (n + 1)) * (i + 1) + (Math.random() - 0.5) * 8,
+            y: 14 + (i % 3) * 9,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: i === selectedIndex ? 1.2 : 0,
+            r: 11,
+            color: this.colors[i % this.colors.length],
+            label: item.place_name.slice(0, 2),
+            fullName: item.place_name,
+            idx: i, isWinner: i === selectedIndex,
+            finished: false, rank: null, trail: [],
+        }));
+    }
+
+    _update() {
+        const w = this.canvas.width, h = this.canvas.height;
+        const finishY = h - 120;
+        const G = 0.28, PEG_E = 0.52, WALL_E = 0.65;
+
+        this.balls.forEach(ball => {
+            if (ball.finished) return;
+            ball.trail.push({ x: ball.x, y: ball.y });
+            if (ball.trail.length > 8) ball.trail.shift();
+
+            ball.vy += ball.isWinner ? G * 1.15 : G;
+            if (ball.isWinner && ball.vy < 1.5) ball.vy += 0.4;
+            const spd = Math.hypot(ball.vx, ball.vy);
+            if (spd > 13) { ball.vx = ball.vx / spd * 13; ball.vy = ball.vy / spd * 13; }
+
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            if (ball.x - ball.r < 0) { ball.x = ball.r; ball.vx = Math.abs(ball.vx) * WALL_E; }
+            if (ball.x + ball.r > w) { ball.x = w - ball.r; ball.vx = -Math.abs(ball.vx) * WALL_E; }
+
+            this.pegs.forEach(peg => {
+                const dx = ball.x - peg.x, dy = ball.y - peg.y;
+                const dist = Math.hypot(dx, dy);
+                const minD = ball.r + peg.r;
+                if (dist < minD && dist > 0.01) {
+                    const nx = dx / dist, ny = dy / dist;
+                    ball.x = peg.x + nx * (minD + 0.5);
+                    ball.y = peg.y + ny * (minD + 0.5);
+                    const dot = ball.vx * nx + ball.vy * ny;
+                    if (dot < 0) {
+                        ball.vx -= (1 + PEG_E) * dot * nx;
+                        ball.vy -= (1 + PEG_E) * dot * ny;
+                        ball.vx += (Math.random() - 0.5) * 2.5;
+                        if (ball.vy < 1) ball.vy = 1;
+                    }
+                }
+            });
+
+            if (ball.y + ball.r >= finishY) {
+                ball.finished = true;
+                ball.y = finishY - ball.r;
+                ball.vx = 0; ball.vy = 0;
+                ball.rank = ++this.rankCounter;
+            }
+        });
+    }
+
+    draw() {
+        const { ctx, canvas, pegs, balls } = this;
         const w = canvas.width, h = canvas.height;
-        const n = slots.length, sw = w / n;
+        const finishY = h - 120;
 
         ctx.clearRect(0, 0, w, h);
-        ctx.fillStyle = '#0d0d1a';
-        ctx.fillRect(0, 0, w, h);
+        const bg = ctx.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, '#060614'); bg.addColorStop(1, '#0e0e22');
+        ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
 
-        // Slot separators + labels
-        for (let i = 0; i < n; i++) {
-            const x = i * sw;
-            const isWinner = i === this.targetSlot && ballPos?.landed;
-            ctx.fillStyle = isWinner ? 'rgba(255,107,53,0.25)' : 'rgba(255,255,255,0.05)';
-            ctx.fillRect(x + 2, h - 85, sw - 4, 85);
-            if (i > 0) {
-                ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-                ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(x, h - 85); ctx.lineTo(x, h); ctx.stroke();
-            }
-            ctx.fillStyle = isWinner ? '#FF6B35' : 'rgba(255,255,255,0.4)';
-            ctx.font = `bold ${sw > 55 ? 11 : 9}px -apple-system, sans-serif`;
-            ctx.textAlign = 'center';
-            const lbl = slots[i].label;
-            ctx.fillText(lbl.length > 4 ? lbl.slice(0, 4) + '..' : lbl, slots[i].x, h - 30);
+        // Subtle column guides
+        ctx.strokeStyle = 'rgba(255,255,255,0.025)'; ctx.lineWidth = 1;
+        const n = this.items.length;
+        for (let i = 1; i < n; i++) {
+            const x = (w / n) * i;
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, finishY); ctx.stroke();
         }
+
+        // Finish line
+        ctx.strokeStyle = 'rgba(255,107,53,0.8)'; ctx.lineWidth = 2;
+        ctx.setLineDash([6, 3]);
+        ctx.beginPath(); ctx.moveTo(0, finishY); ctx.lineTo(w, finishY); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255,107,53,0.9)';
+        ctx.font = 'bold 9px -apple-system,sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+        ctx.fillText('FINISH', 6, finishY - 2);
 
         // Pegs
-        pegs.forEach(p => {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r, 0, 2 * Math.PI);
-            ctx.fillStyle = '#4a9eff';
-            ctx.shadowColor = '#4a9eff';
-            ctx.shadowBlur = 8;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+        pegs.forEach(peg => {
+            ctx.beginPath(); ctx.arc(peg.x, peg.y, peg.r, 0, 2 * Math.PI);
+            ctx.fillStyle = '#00cfff';
+            ctx.shadowColor = '#00cfff'; ctx.shadowBlur = 14;
+            ctx.fill(); ctx.shadowBlur = 0;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1; ctx.stroke();
         });
 
-        // Ball
-        if (ballPos) {
-            const g = ctx.createRadialGradient(ballPos.x - 5, ballPos.y - 5, 2, ballPos.x, ballPos.y, 14);
+        // Balls
+        balls.forEach(ball => {
+            // Trail
+            ball.trail.forEach((t, i) => {
+                const a = Math.round((i / ball.trail.length) * 0.28 * 255).toString(16).padStart(2, '0');
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, ball.r * 0.45 * (i / ball.trail.length), 0, 2 * Math.PI);
+                ctx.fillStyle = ball.color + a;
+                ctx.fill();
+            });
+
+            const g = ctx.createRadialGradient(ball.x - ball.r * 0.3, ball.y - ball.r * 0.35, 1, ball.x, ball.y, ball.r);
             g.addColorStop(0, '#fff');
-            g.addColorStop(0.4, '#FF6B35');
-            g.addColorStop(1, '#c0392b');
-            ctx.beginPath();
-            ctx.arc(ballPos.x, ballPos.y, 13, 0, 2 * Math.PI);
+            g.addColorStop(0.35, ball.color);
+            g.addColorStop(1, shade(ball.color, -65));
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, 2 * Math.PI);
             ctx.fillStyle = g;
-            ctx.shadowColor = '#FF6B35';
-            ctx.shadowBlur = 18;
-            ctx.fill();
+            ctx.shadowColor = ball.isWinner ? '#ffffff' : ball.color;
+            ctx.shadowBlur = ball.isWinner ? 20 : 10;
+            ctx.fill(); ctx.shadowBlur = 0;
+
+            ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            ctx.font = `bold ${Math.round(ball.r * 0.62)}px -apple-system,sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(ball.label, ball.x, ball.y);
+        });
+
+        // Bottom panel
+        const panelY = finishY + 2;
+        ctx.fillStyle = 'rgba(4,4,18,0.92)'; ctx.fillRect(0, panelY, w, h - panelY);
+
+        const finished = [...balls].filter(b => b.finished).sort((a, b) => a.rank - b.rank);
+        const winner = balls.find(b => b.isWinner && b.finished);
+
+        if (winner) {
+            ctx.fillStyle = '#FF6B35';
+            ctx.shadowColor = '#FF6B35'; ctx.shadowBlur = 22;
+            ctx.font = `bold ${w > 360 ? 20 : 16}px -apple-system,sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            const label = winner.fullName.length > 10 ? winner.fullName.slice(0, 9) + '…' : winner.fullName;
+            ctx.fillText('🏆 ' + label, w / 2, panelY + (h - panelY) * 0.38);
             ctx.shadowBlur = 0;
-        }
-    }
 
-    _buildWaypoints(targetSlot) {
-        const w = this.canvas.width, h = this.canvas.height;
-        const n = this.items.length, sw = w / n;
-        const targetX = this.slots[targetSlot].x;
-        const topY = 70, botY = h - 90, rows = 7, rh = (botY - topY) / rows;
-        const pts = [{ x: w / 2, y: 25 }];
-
-        let cx = w / 2;
-        for (let row = 0; row < rows; row++) {
-            const y = topY + row * rh;
-            const rowPegs = this.pegs.filter(p => Math.abs(p.y - y) < 5);
-            if (!rowPegs.length) continue;
-            const t = row / rows;
-            const drift = cx + (targetX - cx) * (0.15 + t * 0.25) * (0.6 + Math.random() * 0.8);
-            const near = rowPegs.reduce((b, p) => Math.abs(p.x - drift) < Math.abs(b.x - drift) ? p : b);
-            cx = drift > near.x
-                ? Math.min(w - sw * 0.5, near.x + 22 + Math.random() * 12)
-                : Math.max(sw * 0.5, near.x - 22 - Math.random() * 12);
-            pts.push({ x: near.x, y });
-            pts.push({ x: cx, y: y + rh * 0.45 });
+            if (finished.length > 1) {
+                const others = finished.filter(b => !b.isWinner).slice(0, 3);
+                const startX = w / 2 - (others.length - 1) * 60;
+                others.forEach((ball, i) => {
+                    const bx = startX + i * 60, by = panelY + (h - panelY) * 0.75;
+                    ctx.beginPath(); ctx.arc(bx - 10, by, 7, 0, 2 * Math.PI);
+                    ctx.fillStyle = ball.color;
+                    ctx.shadowColor = ball.color; ctx.shadowBlur = 6;
+                    ctx.fill(); ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                    ctx.font = '9px -apple-system,sans-serif';
+                    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+                    const nm = ball.fullName.length > 4 ? ball.fullName.slice(0, 3) + '…' : ball.fullName;
+                    ctx.fillText(`${ball.rank}위 ${nm}`, bx - 1, by);
+                });
+            }
+        } else if (finished.length > 0) {
+            const perRow = Math.min(finished.length, 4);
+            const cw = w / perRow;
+            finished.slice(0, 4).forEach((ball, i) => {
+                const cx = cw * i + cw / 2;
+                const cy = panelY + (h - panelY) / 2;
+                ctx.beginPath(); ctx.arc(cx - 14, cy, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = ball.color;
+                ctx.shadowColor = ball.color; ctx.shadowBlur = 8;
+                ctx.fill(); ctx.shadowBlur = 0;
+                ctx.fillStyle = ball.rank === 1 ? '#FF6B35' : 'rgba(255,255,255,0.7)';
+                ctx.font = `bold ${ball.rank === 1 ? 10 : 9}px -apple-system,sans-serif`;
+                ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+                const nm = ball.fullName.length > 5 ? ball.fullName.slice(0, 4) + '…' : ball.fullName;
+                ctx.fillText(`${ball.rank}위 ${nm}`, cx - 3, cy);
+            });
         }
-        pts.push({ x: targetX, y: botY + 5 });
-        pts.push({ x: targetX, y: h - 60, landed: true });
-        return pts;
     }
 
     spin(selectedIndex, onComplete) {
-        this.targetSlot = selectedIndex;
-        this.waypoints = this._buildWaypoints(selectedIndex);
-        this.wpIdx = 0;
-        this.ball = { x: this.waypoints[0].x, y: this.waypoints[0].y, landed: false };
-        this.running = true;
-        this._next(onComplete);
-    }
+        this._initBalls(selectedIndex);
+        const winnerBall = this.balls[selectedIndex];
+        let done = false;
+        const t0 = Date.now();
 
-    _next(onComplete) {
-        if (this.wpIdx >= this.waypoints.length - 1) {
-            this.ball.landed = true;
-            this.draw(this.ball);
-            this.running = false;
-            setTimeout(onComplete, 300);
-            return;
-        }
-        const from = this.waypoints[this.wpIdx];
-        const to = this.waypoints[this.wpIdx + 1];
-        const dx = to.x - from.x, dy = to.y - from.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const steps = Math.max(1, Math.ceil(dist / 4.5));
-        let step = 0;
-        const go = () => {
-            step++;
-            const t = step / steps;
-            this.ball.x = from.x + dx * t;
-            this.ball.y = from.y + dy * t;
-            this.draw(this.ball);
-            if (step >= steps) { this.wpIdx++; this._next(onComplete); }
-            else requestAnimationFrame(go);
+        const loop = () => {
+            this._update();
+
+            if (winnerBall.finished && !done) {
+                done = true;
+                let f = 0;
+                const celebrate = () => {
+                    this._update(); this.draw();
+                    if (f++ < 55) requestAnimationFrame(celebrate);
+                    else onComplete();
+                };
+                requestAnimationFrame(celebrate);
+                return;
+            }
+
+            if (!done && Date.now() - t0 > 9000) {
+                done = true;
+                winnerBall.finished = true;
+                winnerBall.y = (this.canvas.height - 120) - winnerBall.r;
+                winnerBall.vx = 0; winnerBall.vy = 0;
+                winnerBall.rank = 1;
+                if (!this.rankCounter) this.rankCounter = 1;
+                this.draw();
+                setTimeout(onComplete, 900);
+                return;
+            }
+
+            if (!done) { this.draw(); requestAnimationFrame(loop); }
         };
-        requestAnimationFrame(go);
+
+        requestAnimationFrame(loop);
     }
 }
 
