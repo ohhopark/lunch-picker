@@ -411,7 +411,7 @@ async function startSearch() {
             return;
         }
 
-        const take = state.count === 0 ? 8 : state.count;
+        const take = state.format === 'pinball' ? Math.min(list.length, 20) : (state.count === 0 ? 8 : state.count);
         state.restaurants = shuffle(list).slice(0, take);
         if (state.format === 'tournament') {
             initTournament();
@@ -432,18 +432,22 @@ const TYPE_EXPAND = {
     '동남아': ['베트남', '태국', '쌀국수', '동남아', '인도네시아'],
 };
 
+function filterCocktail(list) {
+    return list.filter(r => !r.category_name?.includes('칵테일'));
+}
+
 function fetchRestaurants() {
-    const needed = state.count === 0 ? 8 : state.count;
+    const needed = state.format === 'pinball' ? 20 : (state.count === 0 ? 8 : state.count);
     const types = state.types.flatMap(t => TYPE_EXPAND[t] || [t]);
-    if (types.length === 1) return fetchByType(types[0], needed);
+    if (types.length === 1) return fetchByType(types[0], needed).then(filterCocktail);
     const perType = Math.ceil(needed / types.length);
     return Promise.all(types.map(t => fetchByType(t, perType))).then(results => {
         const seen = new Set();
-        return results.flat().filter(r => {
+        return filterCocktail(results.flat().filter(r => {
             if (seen.has(r.id)) return false;
             seen.add(r.id);
             return true;
-        });
+        }));
     });
 }
 
@@ -683,7 +687,7 @@ class Pinball {
     constructor(canvas, items) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.items = items.slice(0, Math.min(items.length, 8));
+        this.items = items.slice(0, 20);
         this.pegs = [];
         this.balls = [];
         this.targetIdx = -1;
@@ -710,22 +714,21 @@ class Pinball {
         }
     }
 
-    _shufflePool(selectedIndex, forDisplay) {
+    _makeBalls(selectedIndex, forDisplay) {
         const w = this.canvas.width;
-        const items = this.items;
-        const pool = [];
-        for (let k = 0; k < 3; k++) items.forEach((item, i) => pool.push([item, i]));
-        for (let j = pool.length - 1; j > 0; j--) {
+        const indexed = this.items.map((item, i) => ({ item, i }));
+        for (let j = indexed.length - 1; j > 0; j--) {
             const k = Math.floor(Math.random() * (j + 1));
-            [pool[j], pool[k]] = [pool[k], pool[j]];
+            [indexed[j], indexed[k]] = [indexed[k], indexed[j]];
         }
-        const n = pool.length;
-        return pool.map(([item, i], b) => ({
-            x: (w / (n + 1)) * (b + 1) + (forDisplay ? 0 : (Math.random() - 0.5) * 6),
-            y: forDisplay ? (22 + (b % 4) * 8) : (12 + (b % 4) * 8),
+        const n = indexed.length;
+        const r = Math.max(6, Math.floor(w / (n * 2.8)));
+        return indexed.map(({ item, i }, b) => ({
+            x: (w / (n + 1)) * (b + 1) + (forDisplay ? 0 : (Math.random() - 0.5) * 5),
+            y: forDisplay ? (20 + (b % 3) * 10) : (12 + (b % 4) * 8),
             vx: forDisplay ? 0 : (Math.random() - 0.5) * 1.5,
             vy: forDisplay ? 0 : (i === selectedIndex ? 1.2 : 0),
-            r: 8,
+            r,
             color: this.colors[i % this.colors.length],
             label: item.place_name.slice(0, 2),
             fullName: item.place_name,
@@ -735,13 +738,13 @@ class Pinball {
     }
 
     _initDisplay() {
-        this.balls = this._shufflePool(-1, true);
+        this.balls = this._makeBalls(-1, true);
     }
 
     _initBalls(selectedIndex) {
         this.targetIdx = selectedIndex;
         this.rankCounter = 0;
-        this.balls = this._shufflePool(selectedIndex, false);
+        this.balls = this._makeBalls(selectedIndex, false);
     }
 
     _update() {
