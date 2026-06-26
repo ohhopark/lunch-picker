@@ -710,36 +710,38 @@ class Pinball {
         }
     }
 
-    _initDisplay() {
+    _shufflePool(selectedIndex, forDisplay) {
         const w = this.canvas.width;
-        const n = this.items.length;
-        this.balls = this.items.map((item, i) => ({
-            x: (w / (n + 1)) * (i + 1), y: 28 + (i % 2) * 12,
-            vx: 0, vy: 0, r: 11,
+        const items = this.items;
+        const pool = [];
+        for (let k = 0; k < 3; k++) items.forEach((item, i) => pool.push([item, i]));
+        for (let j = pool.length - 1; j > 0; j--) {
+            const k = Math.floor(Math.random() * (j + 1));
+            [pool[j], pool[k]] = [pool[k], pool[j]];
+        }
+        const n = pool.length;
+        return pool.map(([item, i], b) => ({
+            x: (w / (n + 1)) * (b + 1) + (forDisplay ? 0 : (Math.random() - 0.5) * 6),
+            y: forDisplay ? (22 + (b % 4) * 8) : (12 + (b % 4) * 8),
+            vx: forDisplay ? 0 : (Math.random() - 0.5) * 1.5,
+            vy: forDisplay ? 0 : (i === selectedIndex ? 1.2 : 0),
+            r: 8,
             color: this.colors[i % this.colors.length],
             label: item.place_name.slice(0, 2),
             fullName: item.place_name,
-            idx: i, isWinner: false, finished: false, rank: null, trail: [],
+            idx: i, isWinner: !forDisplay && i === selectedIndex,
+            finished: false, rank: null, trail: [],
         }));
     }
 
+    _initDisplay() {
+        this.balls = this._shufflePool(-1, true);
+    }
+
     _initBalls(selectedIndex) {
-        const w = this.canvas.width;
-        const n = this.items.length;
         this.targetIdx = selectedIndex;
         this.rankCounter = 0;
-        this.balls = this.items.map((item, i) => ({
-            x: (w / (n + 1)) * (i + 1) + (Math.random() - 0.5) * 8,
-            y: 14 + (i % 3) * 9,
-            vx: (Math.random() - 0.5) * 1.5,
-            vy: i === selectedIndex ? 1.2 : 0,
-            r: 11,
-            color: this.colors[i % this.colors.length],
-            label: item.place_name.slice(0, 2),
-            fullName: item.place_name,
-            idx: i, isWinner: i === selectedIndex,
-            finished: false, rank: null, trail: [],
-        }));
+        this.balls = this._shufflePool(selectedIndex, false);
     }
 
     _update() {
@@ -871,7 +873,8 @@ class Pinball {
             ctx.shadowBlur = 0;
 
             if (finished.length > 1) {
-                const others = finished.filter(b => !b.isWinner).slice(0, 3);
+                const seen = new Set([winner.idx]);
+                const others = finished.filter(b => { if (!b.isWinner && !seen.has(b.idx)) { seen.add(b.idx); return true; } return false; }).slice(0, 3);
                 const startX = w / 2 - (others.length - 1) * 60;
                 others.forEach((ball, i) => {
                     const bx = startX + i * 60, by = panelY + (h - panelY) * 0.75;
@@ -907,7 +910,7 @@ class Pinball {
 
     spin(selectedIndex, onComplete) {
         this._initBalls(selectedIndex);
-        const winnerBall = this.balls[selectedIndex];
+        const winnerBall = this.balls.find(b => b.isWinner);
         let done = false;
         const t0 = Date.now();
 
