@@ -974,7 +974,7 @@ class Lotto {
         this.cx = w / 2;
         this.cy = h * 0.46;
         this.R = w * 0.38;
-        const br = Math.max(18, Math.min(26, this.R * 0.17));
+        const br = Math.max(14, Math.min(20, this.R * 0.13));
         this.br = br;
         this.balls = this.items.map((item, i) => {
             const a = (i / this.items.length) * 2 * Math.PI;
